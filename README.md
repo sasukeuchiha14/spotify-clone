@@ -36,14 +36,18 @@ This Spotify Clone is a web application that replicates the core features of the
     node server.js
     ```
 
-5. Open `index.html` in your preferred web browser.
+5. Navigate to the frontend directory:
+    ```bash
+    cd ../frontend
+    ```
+    ```
+
+6. Open `index.html` in your preferred web browser.
 
 ## Folder Structure
 
 ```
 /Spotify/
-├── assets/
-│   ├── images/
 ├── backend/
 │   ├── songs/
 │   │   ├── playlist-1/
@@ -56,11 +60,15 @@ This Spotify Clone is a web application that replicates the core features of the
 │   │   ├── playlist-3/
 │   ├── server.js
 │   ├── package.json
-├── css/
-│   ├── style.css
-│   ├── utility.css
-├── index.html
-├── script.js
+├── frontend/
+│   ├── assets/
+│   │   ├── images/
+│   ├── css/
+│   │   ├── style.css
+│   │   ├── utility.css
+│   ├── index.html
+│   ├── script.js
+├── LICENSE.txt
 ├── README.md
 ```
 
