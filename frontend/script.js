@@ -1,11 +1,23 @@
 const SERVER_IP = "www.example.com"; // Change this to your server IP
-const PORT = 0; // Change this to your server port
+const PORT = 0; // No port needed for external access
+
+let SERVER_ADDRESS;
+if (PORT !== 0) {
+    SERVER_ADDRESS = `https://${SERVER_IP}:${PORT}`;
+} else {
+    SERVER_ADDRESS = `https://${SERVER_IP}`;
+}
 
 let currentSong = new Audio();
 currentSong.volume = 1;
 var songs = [];
+var originalSongs = [];
+var globalSongsCache = [];
 var currFolder = "";
 let currentSongIndex = 0;
+let isShuffleMode = false;
+let isGlobalShuffle = false;
+let isGlobalCacheLoaded = false;
 
 // Convert seconds to MM:SS format
 function secondsToMinutesSeconds(seconds) {
@@ -15,17 +27,54 @@ function secondsToMinutesSeconds(seconds) {
     return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
+// Client-side Fisher-Yates shuffle algorithm
+function shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
+// Update song list display
+function updateSongListDisplay() {
+    let songUL = document.querySelector(".songList ul");
+    songUL.innerHTML = "";
+
+    for (let song of songs) {
+        const playlistName = song.playlist || currFolder;
+        songUL.innerHTML += `
+            <li>
+                <img class="invert" width="34" src="assets/images/music.svg" alt="">
+                <div class="info">
+                    <div>${song.title.replaceAll("%20", " ")}</div>
+                    <div id="artist">${playlistName.replaceAll("%20", " ")}</div>
+                </div>
+                <div class="playnow">
+                    <span>Play Now</span>
+                    <img class="invert" src="assets/images/play.svg" alt="">
+                </div>
+            </li>`;
+    }
+
+    // Attach event listeners to play songs
+    document.querySelectorAll(".songList li").forEach((element, index) => {
+        element.addEventListener("click", () => playMusic(songs[index].url));
+    });
+}
+
 // Fetch and display playlists
 async function displayAlbums() {
     console.log("Fetching playlists...");
-    let response = await fetch(`https://${SERVER_IP}:${PORT}/api/playlists`);
+    let response = await fetch(`${SERVER_ADDRESS}/api/playlists`);
     let playlists = await response.json();
     let cardContainer = document.querySelector(".cardContainer");
 
     cardContainer.innerHTML = "";
 
     for (let playlist of playlists) {
-        let metadataResponse = await fetch(`https://${SERVER_IP}:${PORT}/api/songs/${playlist}`);
+        let metadataResponse = await fetch(`${SERVER_ADDRESS}/api/songs/${playlist}`);
         let metadata = await metadataResponse.json();
 
         let description = 'No metadata found';
@@ -58,43 +107,79 @@ async function displayAlbums() {
         card.addEventListener("click", async (event) => {
             let folder = event.currentTarget.dataset.folder;
             console.log(`Fetching songs from ${folder}...`);
-            await getSongs(folder);
+            
+            // Disable global shuffle when selecting a specific playlist
+            if (isGlobalShuffle) {
+                isGlobalShuffle = false;
+                const globalShuffleBtn = document.getElementById("globalShuffle");
+                if (globalShuffleBtn) {
+                    globalShuffleBtn.classList.remove("active");
+                    globalShuffleBtn.innerHTML = `
+                        <img src="assets/images/shuffle.svg" alt="Global Shuffle">
+                        Shuffle All
+                    `;
+                }
+            }
+            
+            // Load songs respecting current shuffle mode
+            await getSongs(folder, isShuffleMode);
             if (songs.length > 0) playMusic(songs[0].url);
         });
     });
 }
 
 // Fetch and display songs from selected playlist
-async function getSongs(folder) {
+async function getSongs(folder, shuffle = false) {
     currFolder = folder;
-    let response = await fetch(`https://${SERVER_IP}:${PORT}/api/songs/${folder}`);
+    let endpoint = `/api/songs/${folder}`;
+    let response = await fetch(`${SERVER_ADDRESS}${endpoint}`);
     let data = await response.json();
 
-    songs = data.songs;
-    let songUL = document.querySelector(".songList ul");
-    songUL.innerHTML = "";
-
-    for (let song of songs) {
-        songUL.innerHTML += `
-            <li>
-                <img class="invert" width="34" src="assets/images/music.svg" alt="">
-                <div class="info">
-                    <div>${song.title.replaceAll("%20", " ")}</div>
-                    <div id="artist">${folder.replaceAll("%20", " ")}</div>
-                </div>
-                <div class="playnow">
-                    <span>Play Now</span>
-                    <img class="invert" src="assets/images/play.svg" alt="">
-                </div>
-            </li>`;
+    originalSongs = data.songs;
+    
+    // Apply shuffle if needed
+    if (shuffle) {
+        songs = shuffleArray(originalSongs);
+    } else {
+        songs = [...originalSongs];
     }
 
-    // Attach event listeners to play songs
-    document.querySelectorAll(".songList li").forEach((element, index) => {
-        element.addEventListener("click", () => playMusic(songs[index].url));
-    });
-
+    updateSongListDisplay();
     return songs;
+}
+
+// Fetch and display songs from all playlists (global shuffle)
+async function getGlobalShuffledSongs() {
+    try {
+        console.log(`Fetching global shuffle from: ${SERVER_ADDRESS}/api/songs/global/shuffle`);
+        let response = await fetch(`${SERVER_ADDRESS}/api/songs/global/shuffle`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        let data = await response.json();
+        console.log("Global shuffle response:", data);
+
+        if (!data.songs || !Array.isArray(data.songs)) {
+            console.error("Invalid songs data received:", data);
+            songs = [];
+            originalSongs = [];
+            return [];
+        }
+
+        originalSongs = [...data.songs];
+        songs = [...data.songs];
+        currFolder = "All Songs";
+
+        updateSongListDisplay();
+        return songs;
+    } catch (error) {
+        console.error("Error fetching global shuffled songs:", error);
+        songs = [];
+        originalSongs = [];
+        return [];
+    }
 }
 
 function playMusic(songUrl) {
@@ -102,19 +187,147 @@ function playMusic(songUrl) {
     currentSong.play();
     play.src = "assets/images/pause.svg";
     currentSongIndex = songs.findIndex(song => song.url === songUrl);
-    document.querySelector(".songinfo").innerHTML = decodeURI(songUrl.split("/").pop());
+    
+    // Extract song name and show playlist info for global shuffle
+    const songName = decodeURI(songUrl.split("/").pop());
+    let displayText = songName;
+    
+    if (isGlobalShuffle && songs[currentSongIndex] && songs[currentSongIndex].playlist) {
+        const playlistName = songs[currentSongIndex].playlist.replaceAll("%20", " ");
+        displayText = `${songName} • ${playlistName}`;
+    }
+    
+    document.querySelector(".songinfo").innerHTML = displayText;
     document.querySelector(".songtime").innerHTML = "00:00 / 00:00";
 }
 
 
+// Play the next song automatically when the current song ends
+function playNextSong() {
+    let nextIndex = (currentSongIndex + 1) % songs.length;
+    playMusic(songs[nextIndex].url);
+}
+
+// Function to play the previous song
+function playPreviousSong() {
+    let prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+    playMusic(songs[prevIndex].url);
+}
+
 // Initialize UI
 async function main() {
     await displayAlbums();
-    await getSongs("Aashiqui 2"); // Default playlist
+    await getSongs("Aashiqui");
 
     if (songs.length > 0) playMusic(songs[0].url);
 
-    // Restored Missing Event Listeners
+    const play = document.getElementById("play");
+    const previous = document.getElementById("previous");
+    const next = document.getElementById("next");
+    const shuffleBtn = document.getElementById("shuffle");
+    const globalShuffleBtn = document.getElementById("globalShuffle");
+    
+    fetchAllSongsInBackground();
+
+    // Global shuffle functionality
+    globalShuffleBtn.addEventListener("click", async () => {
+        isGlobalShuffle = !isGlobalShuffle;
+        globalShuffleBtn.classList.toggle("active", isGlobalShuffle);
+        
+        if (isGlobalShuffle) {
+            console.log("Enabling global shuffle mode...");
+            globalShuffleBtn.innerHTML = `
+                <img src="assets/images/shuffle.svg" alt="Global Shuffle">
+                Stop Global Shuffle
+            `;
+            
+            // Disable regular shuffle when global shuffle is active
+            isShuffleMode = false;
+            shuffleBtn.classList.remove("active");
+            
+            try {
+                if (activateGlobalShuffleInstant()) {
+                    if (songs.length > 0) {
+                        playMusic(songs[0].url);
+                    }
+                } else {
+                    console.log("Cache not ready, fetching from API...");
+                    await getGlobalShuffledSongs();
+                    if (songs.length > 0) {
+                        playMusic(songs[0].url);
+                    } else {
+                        console.log("No songs found in global shuffle");
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to enable global shuffle:", error);
+                // Reset button state on error
+                isGlobalShuffle = false;
+                globalShuffleBtn.classList.remove("active");
+                globalShuffleBtn.innerHTML = `
+                    <img src="assets/images/shuffle.svg" alt="Global Shuffle">
+                    Shuffle All
+                `;
+            }
+        } else {
+            console.log("Disabling global shuffle mode...");
+            globalShuffleBtn.innerHTML = `
+                <img src="assets/images/shuffle.svg" alt="Global Shuffle">
+                Shuffle All
+            `;
+            
+            // Return to default playlist
+            await getSongs("Aashiqui", false);
+            if (songs.length > 0) playMusic(songs[0].url);
+        }
+    });
+
+    // Shuffle functionality
+    shuffleBtn.addEventListener("click", async () => {
+        // Don't allow regular shuffle when global shuffle is active
+        if (isGlobalShuffle) {
+            console.log("Global shuffle is active. Disable global shuffle first.");
+            return;
+        }
+        
+        isShuffleMode = !isShuffleMode;
+        shuffleBtn.classList.toggle("active", isShuffleMode);
+        
+        // Provide user feedback
+        const mode = isShuffleMode ? 'ON' : 'OFF';
+        console.log(`Shuffle mode: ${mode}`);
+        
+        if (currFolder && currFolder !== "All Songs" && originalSongs.length > 0) {
+            console.log(`${isShuffleMode ? 'Enabling' : 'Disabling'} shuffle mode for ${currFolder}...`);
+            
+            // Get current playing song URL for tracking
+            const currentlyPlaying = !currentSong.paused && currentSong.src ? currentSong.src : null;
+            
+            // Apply shuffle or restore original order instantly
+            if (isShuffleMode) {
+                songs = shuffleArray(originalSongs);
+            } else {
+                songs = [...originalSongs]; // Restore original order
+            }
+            
+            // Update display instantly
+            updateSongListDisplay();
+            
+            // Update current song index if a song is playing
+            if (currentlyPlaying) {
+                currentSongIndex = songs.findIndex(song => song.url === currentlyPlaying);
+                if (currentSongIndex === -1) {
+                    currentSongIndex = 0;
+                }
+            }
+        } else if (currFolder && currFolder !== "All Songs") {
+            // If no cached songs, fetch them first
+            console.log(`Loading ${currFolder} for shuffle...`);
+            await getSongs(currFolder, isShuffleMode);
+        }
+    });
+
+    // Play/pause functionality
     play.addEventListener("click", () => {
         if (currentSong.paused) {
             currentSong.play();
@@ -123,6 +336,23 @@ async function main() {
             currentSong.pause();
             play.src = "assets/images/play.svg";
         }
+    });
+
+    // Previous button
+    previous.addEventListener("click", () => {
+        console.log("Previous clicked");
+        playPreviousSong();
+    });
+
+    // Next button
+    next.addEventListener("click", () => {
+        console.log("Next clicked");
+        playNextSong();
+    });
+
+    // Auto-play next song when current song ends
+    currentSong.addEventListener("ended", () => {
+        playNextSong();
     });
 
     // Listen for timeupdate event
@@ -150,37 +380,10 @@ async function main() {
         document.querySelector(".left").style.left = "-120%"
     })
 
-    // Add an event listener to previous b// Play the next song automatically when the current song ends
-    currentSong.addEventListener("ended", () => {
-        playNextSong();
-    });
-    function playNextSong() {
-        let nextIndex = (currentSongIndex + 1) % songs.length; // Loop to first song if at the last one
-        playMusic(songs[nextIndex].url);
-    }
-    
-    // Function to play the previous song
-    function playPreviousSong() {
-        let prevIndex = (currentSongIndex - 1 + songs.length) % songs.length; // Loop to last song if at the first one
-        playMusic(songs[prevIndex].url);
-    }
-
-    // Add an event listener to previous button
-    previous.addEventListener("click", () => {
-        console.log("Previous clicked");
-        playPreviousSong();
-    });
-
-    // Add an event listener to next button
-    next.addEventListener("click", () => {
-        console.log("Next clicked");
-        playNextSong();
-    });
-
     // Keyboard Controls
     addEventListener("keydown", e => {
         if (e.key === " ") {
-            e.preventDefault(); // Prevents accidental page scroll
+            e.preventDefault();
             play.click();
         }
 
@@ -207,7 +410,69 @@ async function main() {
         if (e.key === "MediaTrackNext") {
             playNextSong();
         }
+
+        if (e.key === "s" || e.key === "S") {
+            shuffleBtn.click();
+        }
+        
+        if (e.key === "g" || e.key === "G") {
+            globalShuffleBtn.click();
+        }
     });
+
+    // Background fetch all songs from all playlists
+    async function fetchAllSongsInBackground() {
+        try {
+            console.log("🔄 Background: Fetching all songs for global shuffle...");
+            // Update button tooltip to show loading
+            globalShuffleBtn.title = "Loading songs for instant shuffle...";
+            
+            let response = await fetch(`${SERVER_ADDRESS}/api/songs/global/shuffle`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            let data = await response.json();
+            
+            if (data.songs && Array.isArray(data.songs)) {
+                globalSongsCache = [...data.songs];
+                isGlobalCacheLoaded = true;
+                console.log(`✅ Background: Cached ${globalSongsCache.length} songs for instant global shuffle`);
+                // Update button tooltip to show ready state
+                globalShuffleBtn.title = `⚡ Instant Shuffle All (${globalSongsCache.length} songs ready)`;
+            } else {
+                console.warn("⚠️ Background: Invalid songs data received");
+                globalShuffleBtn.title = "Shuffle All Playlists";
+            }
+        } catch (error) {
+            console.error("❌ Background: Failed to cache global songs:", error);
+            isGlobalCacheLoaded = false;
+            globalShuffleBtn.title = "Shuffle All Playlists";
+        }
+    }
+
+    // Instant global shuffle using cached data
+    function activateGlobalShuffleInstant() {
+        if (!isGlobalCacheLoaded || globalSongsCache.length === 0) {
+            console.warn("⚠️ Global cache not ready, falling back to API fetch");
+            return false;
+        }
+        
+        // Shuffle the cached songs
+        const shuffledGlobalSongs = shuffleArray(globalSongsCache);
+        
+        // Update current state
+        originalSongs = [...shuffledGlobalSongs];
+        songs = [...shuffledGlobalSongs];
+        currFolder = "All Songs";
+        
+        // Update display
+        updateSongListDisplay();
+        
+        console.log(`⚡ Instant global shuffle activated with ${songs.length} songs from cache`);
+        return true;
+    }
 }
 
 // Start

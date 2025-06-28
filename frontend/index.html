@@ -77,7 +77,13 @@
             </div>
 
             <div class="spotifyPlaylist bg-grey rouded m-1 p-2">
-                <h1>Spotify Playlists</h1>
+                <div class="playlist-header">
+                    <h1>Spotify Playlists</h1>
+                    <button id="globalShuffle" class="global-shuffle-btn" title="Shuffle All Playlists">
+                        <img src="assets/images/shuffle.svg" alt="Global Shuffle">
+                        Shuffle All
+                    </button>
+                </div>
 
                 <div class="cardContainer">
                     
@@ -94,9 +100,10 @@
     
                         </marquee>
                         <div class="songbuttons">
-                            <img id="previous" src="assets/images/prevsong.svg" alt="">
-                            <img id="play" src="assets/images/play.svg" alt="">
-                            <img id="next" src="assets/images/nextsong.svg" alt="">
+                            <img id="shuffle" src="assets/images/shuffle.svg" alt="Shuffle" title="Toggle Playlist Shuffle">
+                            <img id="previous" src="assets/images/prevsong.svg" alt="Previous" title="Previous Song">
+                            <img id="play" src="assets/images/play.svg" alt="Play" title="Play/Pause">
+                            <img id="next" src="assets/images/nextsong.svg" alt="Next" title="Next Song">
                         </div>
                         <div class="songtime">
     
