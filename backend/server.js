@@ -3,10 +3,11 @@ const path = require("path");
 const fs = require("fs");
 const cors = require("cors");
 const https = require('https');
+require('dotenv').config();
 
 const app = express();
-const PORT = 5000;
-const SERVER_IP = "www.example.com"; // Change this to your server IP
+const PORT = process.env.PORT || 5000;
+const SERVER_IP = process.env.SERVER_IP || "localhost";
 const EXTERNAL_URL = `https://${SERVER_IP}`; // No port for external access
 
 // Enable CORS
@@ -134,6 +135,68 @@ app.get("/api/songs/global/shuffle", (req, res) => {
     });
 });
 
+// API: Search songs across all playlists
+app.get("/api/search", (req, res) => {
+    const query = req.query.q;
+    
+    if (!query) {
+        return res.status(400).json({ error: "Query parameter 'q' is required" });
+    }
+    
+    const searchTerm = query.toLowerCase();
+    
+    fs.readdir(songsFolder, (err, folders) => {
+        if (err) return res.status(500).json({ error: "Unable to access songs folder" });
+
+        let searchResults = [];
+        let processedFolders = 0;
+        const playlists = folders.filter(folder => fs.lstatSync(path.join(songsFolder, folder)).isDirectory());
+        
+        if (playlists.length === 0) {
+            return res.json({
+                query: query,
+                results: [],
+                count: 0
+            });
+        }
+
+        playlists.forEach(playlist => {
+            const playlistPath = path.join(songsFolder, playlist);
+            
+            fs.readdir(playlistPath, (err, files) => {
+                if (!err) {
+                    files.forEach(file => {
+                        if (file.endsWith(".mp3")) {
+                            const fileName = file.toLowerCase();
+                            const playlistName = playlist.toLowerCase();
+                            
+                            // Search in both file name and playlist name
+                            if (fileName.includes(searchTerm) || playlistName.includes(searchTerm)) {
+                                searchResults.push({
+                                    title: file,
+                                    url: `${EXTERNAL_URL}/songs/${playlist}/${file}`,
+                                    playlist: playlist
+                                });
+                            }
+                        }
+                    });
+                }
+                
+                processedFolders++;
+                
+                // When all folders are processed, return results
+                if (processedFolders === playlists.length) {
+                    res.json({
+                        query: query,
+                        results: searchResults,
+                        count: searchResults.length
+                    });
+                }
+            });
+        });
+    });
+});
+
 // API: Fetch songs in shuffled order
 app.get("/api/songs/:playlist/shuffle", (req, res) => {
     const playlist = req.params.playlist;
@@ -189,8 +252,8 @@ app.get("/api/songs/:playlist/shuffle", (req, res) => {
 
 // Get keys and certificate for HTTPS
 const options = {
-    key: fs.readFileSync('/etc/letsencrypt/live/www.example.com/privkey.pem'), // Change this to your private key
-    cert: fs.readFileSync('/etc/letsencrypt/live/www.example.com/fullchain.pem') // Change this to your certificate
+    key: fs.readFileSync(process.env.SSL_KEY_PATH || '/etc/letsencrypt/live/www.example.com/privkey.pem'),
+    cert: fs.readFileSync(process.env.SSL_CERT_PATH || '/etc/letsencrypt/live/www.example.com/fullchain.pem')
 };
 
 // Start the server
