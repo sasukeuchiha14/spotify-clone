@@ -272,13 +272,24 @@ body{
 .plist .right .plist-cont .title{
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.plist .right .plist-cont .title span:first-child{
+    font-size: 20px;
+    font-weight: 600;
 }
 .plist .right .plist-cont .title a{
     color:var(--graytext);
     font-size: 12px;
     font-weight:600;
-    position: relative;
-    right: 25px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.plist .right .plist-cont .title a:hover{
+    text-decoration: underline;
 }
 
 

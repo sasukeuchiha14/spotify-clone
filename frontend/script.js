@@ -114,11 +114,9 @@ function playMusic(track, playlistElement) {
 
     currentTrack.src = track;
     
-    currentTrack.play().then(() => {
-        console.log("Play successful");
-    }).catch((error) => {
-        console.error("Play failed:", error);
-    });
+    // Don't autoplay - just load the track
+    // User must click play button to start playback
+    currentTrack.load();
     
     // Update Now Playing UI (cover, title, artist)
     const leftInfo = document.querySelector(".controls .left-info");
@@ -150,10 +148,10 @@ function playMusic(track, playlistElement) {
         artistEl.textContent = playlistFolder.replaceAll("%20", " ") || "Unknown Artist";
     }
 
-    // Update play button
+    // Keep play button as play icon (user must click to start)
     const play = document.getElementById("play");
     if (play) {
-        play.src = "assets/images/pause.svg";
+        play.src = "assets/images/play.svg";
     }
 
     // Update current song index
