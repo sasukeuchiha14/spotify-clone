@@ -126,16 +126,20 @@ function playMusic(track, playlistElement) {
 
     // Derive playlist folder and cover path
     let songPath = track.split("/songs/")[1];
+    let displayName = "Unknown Track";
+    let playlistFolder = "Unknown Artist";
+    let coverUrl = "assets/images/music.svg";
+    
     if (songPath) {
         let decodedSongPath = decodeURIComponent(songPath);
         let pathParts = decodedSongPath.split("/");
         let fileName = pathParts.pop();
-        let playlistFolder = pathParts.join("/");
-        let displayName = fileName.replace(/\.mp3$/i, "");
+        playlistFolder = pathParts.join("/");
+        displayName = fileName.replace(/\.mp3$/i, "");
 
         // Set cover image from playlist folder
         if (playlistFolder) {
-            const coverUrl = `${SERVER_ADDRESS}/songs/${encodeURIComponent(playlistFolder)}/cover.jpg`;
+            coverUrl = `${SERVER_ADDRESS}/songs/${encodeURIComponent(playlistFolder)}/cover.jpg`;
             
             coverImg.onerror = function(){
                 coverImg.onerror = null;
@@ -157,6 +161,22 @@ function playMusic(track, playlistElement) {
     // Update current song index
     currentSongIndex = songs.findIndex(song => song.url === track);
     if (currentSongIndex === -1) currentSongIndex = 0;
+    
+    // Update Media Session metadata for notification controls
+    updateMediaSession(displayName, playlistFolder, coverUrl);
+}
+
+// Update Media Session API for mobile notification controls
+function updateMediaSession(title, artist, artwork) {
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: title || 'Unknown Track',
+            artist: artist || 'Unknown Artist',
+            artwork: [
+                { src: artwork || 'assets/images/music.svg', sizes: '512x512', type: 'image/jpg' }
+            ]
+        });
+    }
 }
 
 function handleSongEnd() {
@@ -554,7 +574,7 @@ async function main() {
     });
 
     // Previous
-    prev.addEventListener("click", () => {
+    const prevTrack = () => {
         if (!songs || songs.length === 0) return;
         
         let prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
@@ -563,10 +583,18 @@ async function main() {
         let targetElement = playlistElements[prevIndex] || null;
         
         playMusic(songs[prevIndex].url, targetElement);
-    });
+        // Auto-play when using next/prev buttons
+        if (currentTrack.paused) {
+            currentTrack.play().then(() => {
+                document.getElementById("play").src = "assets/images/pause.svg";
+            });
+        }
+    };
+    
+    prev.addEventListener("click", prevTrack);
 
     // Next
-    next.addEventListener("click", () => {
+    const nextTrack = () => {
         if (!songs || songs.length === 0) return;
         
         let nextIndex = (currentSongIndex + 1) % songs.length;
@@ -575,11 +603,43 @@ async function main() {
         let targetElement = playlistElements[nextIndex] || null;
         
         playMusic(songs[nextIndex].url, targetElement);
-    });
+        // Auto-play when using next/prev buttons
+        if (currentTrack.paused) {
+            currentTrack.play().then(() => {
+                document.getElementById("play").src = "assets/images/pause.svg";
+            });
+        }
+    };
+    
+    next.addEventListener("click", nextTrack);
 
     // Auto-play next song
     currentTrack.removeEventListener('ended', handleSongEnd);
     currentTrack.addEventListener('ended', handleSongEnd);
+    
+    // Setup Media Session action handlers for mobile notifications
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.setActionHandler('play', () => {
+            currentTrack.play();
+            document.getElementById("play").src = "assets/images/pause.svg";
+        });
+        
+        navigator.mediaSession.setActionHandler('pause', () => {
+            currentTrack.pause();
+            document.getElementById("play").src = "assets/images/play.svg";
+        });
+        
+        navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
+        navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+        
+        navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+            currentTrack.currentTime = Math.max(currentTrack.currentTime - (details.seekOffset || 10), 0);
+        });
+        
+        navigator.mediaSession.setActionHandler('seekforward', (details) => {
+            currentTrack.currentTime = Math.min(currentTrack.currentTime + (details.seekOffset || 10), currentTrack.duration);
+        });
+    }
 
     // Time update
     currentTrack.addEventListener('timeupdate', () => {
