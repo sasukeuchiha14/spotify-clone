@@ -102,8 +102,8 @@ function updatePlaylistIcon(element, isPlaying) {
 
 // ========== PLAYBACK FUNCTIONS ==========
 
-function playMusic(track, playlistElement) {
-    console.log("playMusic called with track:", track);
+function playMusic(track, playlistElement, shouldAutoplay = true) {
+    console.log("playMusic called with track:", track, "shouldAutoplay:", shouldAutoplay);
     
     resetAllPlaylistIcons();
     currentPlayingElement = playlistElement;
@@ -114,9 +114,16 @@ function playMusic(track, playlistElement) {
 
     currentTrack.src = track;
     
-    // Don't autoplay - just load the track
-    // User must click play button to start playback
-    currentTrack.load();
+    if (shouldAutoplay) {
+        currentTrack.play().then(() => {
+            console.log("Play successful");
+        }).catch((error) => {
+            console.error("Play failed:", error);
+        });
+    } else {
+        // Just load without playing (for initial page load)
+        currentTrack.load();
+    }
     
     // Update Now Playing UI (cover, title, artist)
     const leftInfo = document.querySelector(".controls .left-info");
@@ -152,10 +159,14 @@ function playMusic(track, playlistElement) {
         artistEl.textContent = playlistFolder.replaceAll("%20", " ") || "Unknown Artist";
     }
 
-    // Keep play button as play icon (user must click to start)
+    // Update play button based on autoplay
     const play = document.getElementById("play");
     if (play) {
-        play.src = "assets/images/play.svg";
+        if (shouldAutoplay) {
+            play.src = "assets/images/pause.svg";
+        } else {
+            play.src = "assets/images/play.svg";
+        }
     }
 
     // Update current song index
@@ -205,7 +216,7 @@ function handleSongEnd() {
             }
         });
         
-        playMusic(songs[nextIndex].url, targetElement);
+        playMusic(songs[nextIndex].url, targetElement, true);
     }
 }
 
@@ -228,7 +239,7 @@ function updatePlaylistDisplay() {
     // Attach event listeners to play songs
     document.querySelectorAll(".playlist ul li").forEach((element, index) => {
         element.addEventListener("click", () => {
-            playMusic(songs[index].url, element);
+            playMusic(songs[index].url, element, true);
         });
     });
 }
@@ -286,7 +297,7 @@ async function displayPlaylists() {
             }
             
             await getSongs(playlist);
-            if (songs.length > 0) playMusic(songs[0].url);
+            if (songs.length > 0) playMusic(songs[0].url, null, true);
         });
     }
     
@@ -301,6 +312,17 @@ async function getSongs(folder) {
 
     originalSongs = data.songs;
     songs = [...originalSongs];
+    
+    // Reset shuffle mode when changing playlists
+    isShuffleMode = false;
+    const shufflePlaylistBtn = document.getElementById("shufflePlaylist");
+    if (shufflePlaylistBtn) {
+        shufflePlaylistBtn.classList.remove("active");
+        shufflePlaylistBtn.innerHTML = `
+            <img src="assets/images/shuffle.svg" class="invert" alt="Shuffle">
+            Shuffle
+        `;
+    }
 
     updatePlaylistDisplay();
     return songs;
@@ -477,11 +499,11 @@ async function main() {
     // Display playlists
     await displayPlaylists();
     
-    // Load default playlist
+    // Load default playlist (no autoplay on initial load)
     const playlists = await (await fetch(`${SERVER_ADDRESS}/api/playlists`)).json();
     if (playlists.length > 0) {
         await getSongs(playlists[0]);
-        if (songs.length > 0) playMusic(songs[0].url);
+        if (songs.length > 0) playMusic(songs[0].url, null, false);
     }
     
     // Fetch all songs in background (update cache if needed)
@@ -500,6 +522,7 @@ async function main() {
     const prev = document.getElementById("prev");
     const next = document.getElementById("next");
     const globalShuffleBtn = document.getElementById("globalShuffle");
+    const shufflePlaylistBtn = document.getElementById("shufflePlaylist");
     const searchInput = document.getElementById("searchInput");
 
     // Search functionality
@@ -531,13 +554,13 @@ async function main() {
             
             if (activateGlobalShuffle()) {
                 if (songs.length > 0) {
-                    playMusic(songs[0].url);
+                    playMusic(songs[0].url, null, true);
                 }
             } else {
                 console.log("Cache not ready, fetching...");
                 await fetchAllSongsForCache();
                 if (activateGlobalShuffle() && songs.length > 0) {
-                    playMusic(songs[0].url);
+                    playMusic(songs[0].url, null, true);
                 }
             }
         } else {
@@ -551,8 +574,36 @@ async function main() {
             const playlists = await (await fetch(`${SERVER_ADDRESS}/api/playlists`)).json();
             if (playlists.length > 0) {
                 await getSongs(playlists[0]);
-                if (songs.length > 0) playMusic(songs[0].url);
+                if (songs.length > 0) playMusic(songs[0].url, null, true);
             }
+        }
+    });
+
+    // Shuffle Playlist Button
+    shufflePlaylistBtn.addEventListener("click", () => {
+        if (!songs || songs.length === 0) return;
+        
+        isShuffleMode = !isShuffleMode;
+        shufflePlaylistBtn.classList.toggle("active", isShuffleMode);
+        
+        if (isShuffleMode) {
+            console.log("Shuffling current playlist...");
+            shufflePlaylistBtn.innerHTML = `
+                <img src="assets/images/shuffle.svg" class="invert" alt="Unshuffle">
+                Unshuffle
+            `;
+            songs = shuffleArray(originalSongs);
+            updatePlaylistDisplay();
+            if (songs.length > 0) playMusic(songs[0].url, null, true);
+        } else {
+            console.log("Restoring original order...");
+            shufflePlaylistBtn.innerHTML = `
+                <img src="assets/images/shuffle.svg" class="invert" alt="Shuffle">
+                Shuffle
+            `;
+            songs = [...originalSongs];
+            updatePlaylistDisplay();
+            if (songs.length > 0) playMusic(songs[0].url, null, true);
         }
     });
 
@@ -582,13 +633,7 @@ async function main() {
         let playlistElements = document.querySelectorAll(".playlist ul li");
         let targetElement = playlistElements[prevIndex] || null;
         
-        playMusic(songs[prevIndex].url, targetElement);
-        // Auto-play when using next/prev buttons
-        if (currentTrack.paused) {
-            currentTrack.play().then(() => {
-                document.getElementById("play").src = "assets/images/pause.svg";
-            });
-        }
+        playMusic(songs[prevIndex].url, targetElement, true);
     };
     
     prev.addEventListener("click", prevTrack);
@@ -602,13 +647,7 @@ async function main() {
         let playlistElements = document.querySelectorAll(".playlist ul li");
         let targetElement = playlistElements[nextIndex] || null;
         
-        playMusic(songs[nextIndex].url, targetElement);
-        // Auto-play when using next/prev buttons
-        if (currentTrack.paused) {
-            currentTrack.play().then(() => {
-                document.getElementById("play").src = "assets/images/pause.svg";
-            });
-        }
+        playMusic(songs[nextIndex].url, targetElement, true);
     };
     
     next.addEventListener("click", nextTrack);
@@ -629,8 +668,12 @@ async function main() {
             document.getElementById("play").src = "assets/images/play.svg";
         });
         
-        navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
-        navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+            if (prevTrack) prevTrack();
+        });
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+            if (nextTrack) nextTrack();
+        });
         
         navigator.mediaSession.setActionHandler('seekbackward', (details) => {
             currentTrack.currentTime = Math.max(currentTrack.currentTime - (details.seekOffset || 10), 0);

@@ -35,6 +35,56 @@ body{
     flex-direction: column;
 }
 
+.plist .left .playlist-controls{
+    padding: 10px 0;
+    margin-bottom: 10px;
+}
+
+.plist .left .shuffle-btn{
+    width: 100%;
+    background: linear-gradient(135deg, #1db954, #1ed760);
+    color: white;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3);
+}
+
+.plist .left .shuffle-btn:hover{
+    background: linear-gradient(135deg, #1ed760, #1db954);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
+}
+
+.plist .left .shuffle-btn img{
+    width: 14px;
+    height: 14px;
+    filter: invert(1);
+}
+
+.plist .left .shuffle-btn.active{
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+}
+
+.plist .left .shuffle-btn.active:hover{
+    background: linear-gradient(135deg, #f7931e, #ff6b35);
+    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+}
+
+.plist .left .playlist{
+    flex: 1;
+    overflow-y: auto;
+}
+
 .plist .right{
     position: relative;
     flex: 1;
